@@ -16,7 +16,7 @@ public class OneSecMinMax {
         process(key, drStart, samplesPerSecond, y);
     }
     
-    public OneSecMinMax(DataRecord dr) throws SeedFormatException, UnsupportedCompressionType, CodecException {
+    public OneSecMinMax(DataRecord dr) throws SeedFormatException, CodecException {
         Instant drStart = dr.getStartBtime().toInstant();
         double samplesPerSecond = dr.getSampleRate();
         
@@ -81,6 +81,17 @@ public class OneSecMinMax {
             maximum[idx] = max;
             idx++;
         }
+    }
+    
+    public String[] keyAsNSLC() throws SeedFormatException {
+        String[] split = key.split("\\.");
+        if (split.length != 4) {
+            throw new SeedFormatException("key does not look like Net.Sta.Loc.Chan: "+key);
+        }
+        for (int i = 0; i < split.length; i++) {
+            split[i] = split[i].trim();
+        }
+        return split;
     }
     
     String key;

@@ -17,7 +17,9 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoField;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 
 import com.martiansoftware.jsap.FlaggedOption;
 import com.martiansoftware.jsap.JSAP;
@@ -29,6 +31,7 @@ import com.martiansoftware.jsap.SimpleJSAP;
 import com.martiansoftware.jsap.stringparsers.FileStringParser;
 
 import edu.iris.dmc.seedcodec.CodecException;
+import edu.iris.dmc.seedcodec.SteimException;
 import edu.iris.dmc.seedcodec.UnsupportedCompressionType;
 import edu.sc.seis.seisFile.datalink.DataLink;
 import edu.sc.seis.seisFile.datalink.DataLinkException;
@@ -46,8 +49,8 @@ public class DataLinkOneSec {
         VERBOSE  = false;
         this.minMaxDir = minMaxDir;
         yearFormatter = DateTimeFormatter.ofPattern("yyyy").withZone(ZoneId.of("UTC"));
-        doyFormatter = DateTimeFormatter.ofPattern("DD").withZone(ZoneId.of("UTC"));
-        formatter = DateTimeFormatter.ofPattern("yyyy.DD.HH").withZone(ZoneId.of("UTC"));
+        doyFormatter = DateTimeFormatter.ofPattern("DDD").withZone(ZoneId.of("UTC"));
+        formatter = DateTimeFormatter.ofPattern("yyyy.DDD.HH").withZone(ZoneId.of("UTC"));
         if (!minMaxDir.exists()) {
             throw new RuntimeException("min max dir doesn't exist: " + minMaxDir);
         }
@@ -72,9 +75,7 @@ public class DataLinkOneSec {
                 }
             }
             inDataLink.endStream();
-            for (OneSecMinMax onesec : lastOneSecMap.values()) {
-                sendMinMax(onesec);
-            }
+            sendRemining();
 
         } catch (DataLinkException e) {
             e.printStackTrace();
@@ -82,9 +83,8 @@ public class DataLinkOneSec {
             e.printStackTrace();
         } catch (SeedFormatException e) {
             e.printStackTrace();
-        } catch (UnsupportedCompressionType e) {
-            e.printStackTrace();
-        } catch (CodecException e) {
+        } catch (SteimException e) {
+            // TODO Auto-generated catch block
             e.printStackTrace();
         } finally {
             inDataLink.close();
@@ -93,24 +93,34 @@ public class DataLinkOneSec {
 
     public void processMiniseedFile(DataInputStream dis)
             throws SeedFormatException, IOException, UnsupportedCompressionType, CodecException {
+        try {
         while (true) {
             SeedRecord sr = SeedRecord.read(dis, 0);
             if (sr instanceof DataRecord) {
                 processDataRecord((DataRecord) sr);
             }
         }
-
-    }
-
-    void processDataPacket(DataLinkPacket packet)
-            throws SeedFormatException, UnsupportedCompressionType, CodecException {
-        if (packet.getStreamId().endsWith("/MSEED")) {
-            DataRecord dr = packet.getMiniseed();
-            processDataRecord(dr);
+        } catch(EOFException e) {
+            sendRemining();
+            throw e;
         }
     }
 
-    void processDataRecord(DataRecord dr) throws SeedFormatException, UnsupportedCompressionType, CodecException {
+    void processDataPacket(DataLinkPacket packet)
+            throws DataLinkException {
+        if (packet.getStreamId().endsWith("/MSEED")) {
+            DataRecord dr = packet.getMiniseed();
+            try {
+                processDataRecord(dr);
+            } catch (SeedFormatException e) {
+                throw new DataLinkException(e);
+            } catch (CodecException e) {
+                throw new DataLinkException(e);
+            }
+        }
+    }
+
+    void processDataRecord(DataRecord dr) throws SeedFormatException, CodecException {  
 
         OneSecMinMax onesec = new OneSecMinMax(dr);
         OneSecMinMax prev = lastOneSecMap.get(onesec.key);
@@ -125,16 +135,54 @@ public class DataLinkOneSec {
                 prev = null;
             }
         }
-        if (onesec.maximum.length >= sendThreashold) {
+        if (sendThreashold > 0 && onesec.maximum.length >= sendThreashold) {
             sendMinMax(onesec);
             lastOneSecMap.remove(onesec.key);
         } else {
             lastOneSecMap.put(onesec.key, onesec);
         }
     }
+    
+    private void sendRemining() throws SeedFormatException, SteimException {
+        for (OneSecMinMax onesec : lastOneSecMap.values()) {
+            sendMinMax(onesec);
+        }
+    }
 
-    private void sendMinMax(OneSecMinMax onesec) {
-        System.out.println("Pretend Send MinMax: " + onesec.key + " " + onesec.minimum.length);
+    private void sendMinMax(OneSecMinMax onesec) throws SeedFormatException, SteimException {
+        try {
+            System.out.println("Pretend Send MinMax: " + onesec.key + " " + onesec.minimum.length);
+            ArrayList<DataRecord> minMaxList = MiniSeedFactory.createMiniseed(onesec);
+            DataRecord dr = minMaxList.get(0);
+            String netCode =  dr.getHeader().getNetworkCode().trim();
+            String staCode =  dr.getHeader().getStationIdentifier().trim();
+            String locCode =  dr.getHeader().getLocationIdentifier().trim();
+            String chanCode =  dr.getHeader().getChannelIdentifier().trim();
+
+            ZonedDateTime start = ZonedDateTime.ofInstant(onesec.start, UTC_ZONE);
+            String[] split = onesec.keyAsNSLC();
+            File netDir = new File(minMaxDir, netCode);
+            File staDir = new File(netDir, staCode);
+            String year = yearFormatter.format(start);
+            File yearDir = new File(staDir, year);
+            String doy = doyFormatter.format(start);
+            File jdayDir = new File(yearDir, doy);
+            jdayDir.mkdirs();
+            File minmax = new File(jdayDir, netCode+"." +staCode+"." +locCode+"." +chanCode + "." + formatter.format(onesec.start));
+
+            DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(minmax, true)));
+            for (DataRecord dataRecord : minMaxList) {
+                dataRecord.write(dos);
+            }
+            dos.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void OLDsendMinMax(OneSecMinMax onesec) {
         ZonedDateTime start = ZonedDateTime.ofInstant(onesec.start, UTC_ZONE);
         String[] split = onesec.key.split("\\.");
         File netDir = new File(minMaxDir, split[0]);
@@ -181,21 +229,28 @@ public class DataLinkOneSec {
 
     boolean keepGoing = true;
 
-    JSAPResult parseDmcLine(String[] args) {
+    static JSAPResult parseCmdLine(String[] args) {
         SimpleJSAP jsap;
         try {
-            jsap = new SimpleJSAP( 
-                                             "OneSecMinMax", 
-                                             "One sec min max from miniseed",
-                                             new Parameter[] {
-                                                 new FlaggedOption( "file", FileStringParser.getParser().setMustBeFile(true), JSAP.NO_DEFAULT, JSAP.REQUIRED, 'f', JSAP.NO_LONGFLAG, 
-                                                     "A miniseed file." ),
-                                                 new QualifiedSwitch( "verbose", JSAP.STRING_PARSER, JSAP.NO_DEFAULT, JSAP.NOT_REQUIRED, 'v', "verbose", 
-                                                     "Requests verbose output." ).setList( true ).setListSeparator( ',' )
-                                             }
-                                         );
+            jsap = new SimpleJSAP("OneSecMinMax", 
+                                  "One sec min max from miniseed",
+                                  new Parameter[] {
+                                          new FlaggedOption( "file", FileStringParser.getParser().setMustExist(true), JSAP.NO_DEFAULT, JSAP.REQUIRED, 'f', JSAP.NO_LONGFLAG, 
+                                                  "A miniseed file." ),
+                                          new FlaggedOption( "outputdir", FileStringParser.getParser().setMustBeDirectory(true), JSAP.NO_DEFAULT, JSAP.REQUIRED, 'o', JSAP.NO_LONGFLAG, 
+                                                  "A miniseed file." ),
+                                          new QualifiedSwitch( "verbose", JSAP.STRING_PARSER, JSAP.NO_DEFAULT, JSAP.NOT_REQUIRED, 'v', "verbose", 
+                                                  "Requests verbose output." ).setList( true ).setListSeparator( ',' )
+                                  }
+                    );
                                      
         JSAPResult config = jsap.parse(args); 
+        if ( ! config.success()) {
+            Iterator it = config.getErrorMessageIterator();
+            while (it.hasNext()) {
+                System.err.println(it.next());
+            }
+        }
         return config;
         } catch (JSAPException e) {
            throw new RuntimeException(e);
@@ -204,11 +259,16 @@ public class DataLinkOneSec {
 
     public static void main(String[] args) {
         try {
-            DataLinkOneSec app = new DataLinkOneSec(new File("minmax"));
+            JSAPResult config = parseCmdLine(args);
+            if ( ! config.success()) {
+                System.err.println("Can't parse cmd line args, quiting");
+                return;
+            }
+            DataLinkOneSec app = new DataLinkOneSec(config.getFile("outputdir"));
 
             //app.minMaxDir = new File("/data/minmax");
             
-            JSAPResult config = app.parseDmcLine(args);
+            
             if (config.contains("file")) {
                 File miniseedFile = config.getFile("file");
                 if (miniseedFile.canRead()) {
