@@ -151,7 +151,7 @@ public class DataLinkOneSec {
 
     private void sendMinMax(OneSecMinMax onesec) throws SeedFormatException, SteimException {
         try {
-            System.out.println("Pretend Send MinMax: " + onesec.key + " " + onesec.minimum.length);
+            //System.out.println("Pretend Send MinMax: " + onesec.key + " " + onesec.minimum.length);
             ArrayList<DataRecord> minMaxList = MiniSeedFactory.createMiniseed(onesec);
             DataRecord dr = minMaxList.get(0);
             String netCode =  dr.getHeader().getNetworkCode().trim();

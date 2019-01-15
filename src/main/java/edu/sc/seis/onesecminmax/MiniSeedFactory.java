@@ -41,11 +41,6 @@ public class MiniSeedFactory {
                 steimDataMin = Steim2.encode(lessSamples, STEIM_FRAME_IN_512);
             }
             
-            if (steimDataMin.getNumSamples() < minData.length) {
-                // real usage would loop, creating multiple data records, 
-                // but to keep this example simple we only create the first one
-                System.err.println("Can't fit all data into one record, "+steimDataMin.getNumSamples()+" out of "+minData.length);
-            }
 
             try {
                 minRecord.setData(steimDataMin.getEncodedData());

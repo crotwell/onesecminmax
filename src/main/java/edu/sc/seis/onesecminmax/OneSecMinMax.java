@@ -29,7 +29,7 @@ public class OneSecMinMax {
     }
     
     void process(String key, Instant drStart, double samplesPerSecond, int[] y) {
-        System.out.println("Process: "+key+" "+drStart+"  "+y.length+" sps"+samplesPerSecond);
+        //System.out.println("Process: "+key+" "+drStart+"  "+y.length+" sps"+samplesPerSecond);
         this.key = key;
         this.start = drStart.truncatedTo(ChronoUnit.SECONDS);
         Instant lastSampleTime = drStart.plus(Duration.ofSeconds(0, Math.round(1.0*(y.length-1)/samplesPerSecond*NANO_IN_SEC)));
@@ -38,7 +38,7 @@ public class OneSecMinMax {
         int numSeconds = (int)drDuration.getSeconds();
         if (drDuration.getNano() > 0) {numSeconds++;}
         if (lastSampleTime.equals(lastSampleTime.truncatedTo(ChronoUnit.SECONDS))) {numSeconds++;}
-        System.out.println("   numSec: "+numSeconds+"  "+y.length+" "+key);
+        //System.out.println("   numSec: "+numSeconds+"  "+y.length+" "+key);
         
         Duration offsetDur = Duration.between(start, drStart);
         int skipSamples = (int)Math.floor(offsetDur.getNano()*samplesPerSecond/NANO_IN_SEC);
@@ -55,7 +55,7 @@ public class OneSecMinMax {
         if (firstSecSamples != 0) {
             int min = y[0];
             int max = y[0];
-            for( int i=1; i< firstSecSamples; i++) {
+            for( int i=1; i < y.length && i< firstSecSamples; i++) {
                 min = Math.min(min, y[i]);
                 max = Math.max(max, y[i]);
                 //System.out.println(i+" "+idx+"  m "+min+" "+max);
