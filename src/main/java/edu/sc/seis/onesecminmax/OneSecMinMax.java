@@ -48,8 +48,7 @@ public class OneSecMinMax {
         }
         //System.out.println("firstSecSamples "+firstSecSamples+" samplesPerSecond "+samplesPerSecond+" offset "+offsetDur);
 
-        minimum = new int[numSeconds];
-        maximum = new int[numSeconds];
+        minmax = new int[2*numSeconds];
         
         int idx = 0;
         if (firstSecSamples != 0) {
@@ -60,13 +59,14 @@ public class OneSecMinMax {
                 max = Math.max(max, y[i]);
                 //System.out.println(i+" "+idx+"  m "+min+" "+max);
             }
-            minimum[idx] = min;
-            maximum[idx] = max;
+            minmax[idx] = min;
+            idx++;
+            minmax[idx] = max;
             idx++;
         }
         int i=firstSecSamples;
         //System.out.println("Before while: "+i +"<"+ y.length +" && "+ idx +" < "+ minimum.length);
-        while (i < y.length && idx < minimum.length) {
+        while (i < y.length && idx < minmax.length) {
             int min = y[i];
             int max = y[i];
             i++;
@@ -77,8 +77,9 @@ public class OneSecMinMax {
                 i++;
             }
             //System.out.println(i+" minmax "+idx+" "+min+" "+max);
-            minimum[idx] = min;
-            maximum[idx] = max;
+            minmax[idx] = min;
+            idx++;
+            minmax[idx] = max;
             idx++;
         }
     }
@@ -96,42 +97,33 @@ public class OneSecMinMax {
     
     String key;
     Instant start;
-    int[] minimum;
-    int[] maximum;
+    int[] minmax;
 
     public final static int NANO_IN_SEC = 1000000000;
 
     public boolean isContiguous(OneSecMinMax onesec) {
         Duration dur = Duration.between(start, onesec.start);
        // System.out.println(("one sec contiguous "+dur.getSeconds()+" "+dur.getNano()+"  "+minimum.length));
-        return dur.getSeconds() == minimum.length-1 || dur.getSeconds() == minimum.length;
+        return dur.getSeconds() == minmax.length/2-1 || dur.getSeconds() == minmax.length/2;
     }
 
     public void concat(OneSecMinMax onesec) {
 
         Duration dur = Duration.between(start, onesec.start);
-        if (dur.getSeconds() == minimum.length-1) {
+        if (dur.getSeconds() == minmax.length/2-1) {
             // last second overlaps
-            int[] min = new int[minimum.length+onesec.minimum.length-1];
-            int[] max = new int[minimum.length+onesec.minimum.length-1];
-            System.arraycopy(minimum, 0, min, 0, minimum.length);
-            System.arraycopy(maximum, 0, max, 0, maximum.length);
-            min[minimum.length-1] = Math.min(min[minimum.length-1], onesec.minimum[0]);
-            max[maximum.length-1] = Math.max(max[maximum.length-1], onesec.maximum[0]);
-            System.arraycopy(onesec.minimum, 1, min, minimum.length, onesec.minimum.length-1);
-            System.arraycopy(onesec.maximum, 1, max, maximum.length, onesec.maximum.length-1);
-            this.minimum = min;
-            this.maximum = max;
-        } else if (dur.getSeconds() == minimum.length) {
+            int[] tmpMinmax = new int[minmax.length+onesec.minmax.length-2];
+            System.arraycopy(minmax, 0, tmpMinmax, 0, minmax.length-2);
+            tmpMinmax[minmax.length-2] = Math.min(minmax[minmax.length-2], onesec.minmax[0]);
+            tmpMinmax[minmax.length-1] = Math.max(minmax[minmax.length-1], onesec.minmax[1]);
+            System.arraycopy(onesec.minmax, 2, tmpMinmax, minmax.length, onesec.minmax.length-2);
+            this.minmax = tmpMinmax;
+        } else if (dur.getSeconds() == minmax.length/2) {
             // no overlap
-            int[] min = new int[minimum.length+onesec.minimum.length];
-            int[] max = new int[minimum.length+onesec.minimum.length];
-            System.arraycopy(minimum, 0, min, 0, minimum.length);
-            System.arraycopy(maximum, 0, max, 0, maximum.length);
-            System.arraycopy(onesec.minimum, 0, min, minimum.length, onesec.minimum.length);
-            System.arraycopy(onesec.maximum, 0, max, maximum.length, onesec.maximum.length);
-            this.minimum = min;
-            this.maximum = max;
+            int[] tmpMinmax = new int[minmax.length+onesec.minmax.length];
+            System.arraycopy(minmax, 0, tmpMinmax, 0, minmax.length);
+            System.arraycopy(onesec.minmax, 0, tmpMinmax, minmax.length, onesec.minmax.length);
+            this.minmax = tmpMinmax;
         } else {
             throw new RuntimeException("one sec not contiguous "+dur.getSeconds()+" "+dur.getNano());
         }

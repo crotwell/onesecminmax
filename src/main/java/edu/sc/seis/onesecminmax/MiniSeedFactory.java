@@ -21,43 +21,31 @@ public class MiniSeedFactory {
         int seq = 1;
         String[] nslc = onesec.keyAsNSLC();
         Instant start = onesec.start;
-        int samplesRemaining = onesec.minimum.length;
-        int[] minData = onesec.minimum;
-        int[] maxData = onesec.maximum;
+        int samplesRemaining = onesec.minmax.length;
+        int[] minMaxData = onesec.minmax;
         int offset = 0;
         while (samplesRemaining > 0) {
-            DataRecord minRecord = createEmptyDataRecord(nslc, start, seq++, false);
-            DataRecord maxRecord = createEmptyDataRecord(nslc, start, seq++, true);
+            DataRecord minMaxRecord = createEmptyDataRecord(nslc, start, seq++);
 
-            SteimFrameBlock steimDataMin = Steim2.encode(minData, STEIM_FRAME_IN_512);
-            SteimFrameBlock steimDataMax = Steim2.encode(maxData, STEIM_FRAME_IN_512);
-            if (steimDataMin.getNumSamples() < steimDataMax.getNumSamples()) {
-                int[] lessSamples = new int[steimDataMin.getNumSamples()];
-                System.arraycopy(maxData, 0, lessSamples, 0, lessSamples.length);
-                steimDataMax = Steim2.encode(lessSamples, STEIM_FRAME_IN_512);
-            } else if (steimDataMin.getNumSamples() > steimDataMax.getNumSamples()) {
-                int[] lessSamples = new int[steimDataMax.getNumSamples()];
-                System.arraycopy(minData, 0, lessSamples, 0, lessSamples.length);
-                steimDataMin = Steim2.encode(lessSamples, STEIM_FRAME_IN_512);
+            SteimFrameBlock steimDataMinMax = Steim2.encode(minMaxData, STEIM_FRAME_IN_512);
+            if (steimDataMinMax.getNumSamples() % 2 == 1) {
+                // don't want min in one record and max in next
+                int[] lessSamples = new int[steimDataMinMax.getNumSamples()-1];
+                System.arraycopy(minMaxData, 0, lessSamples, 0, lessSamples.length);
+                steimDataMinMax = Steim2.encode(lessSamples, STEIM_FRAME_IN_512);
             }
             
 
             try {
-                minRecord.setData(steimDataMin.getEncodedData());
-                minRecord.getHeader().setNumSamples((short)steimDataMin.getNumSamples());
-                maxRecord.setData(steimDataMax.getEncodedData());
-                maxRecord.getHeader().setNumSamples((short)steimDataMax.getNumSamples());
-                out.add(minRecord);
-                out.add(maxRecord);
-                samplesRemaining -= steimDataMin.getNumSamples();
-                start = start.plusSeconds(steimDataMin.getNumSamples());
-                offset += steimDataMin.getNumSamples();
+                minMaxRecord.setData(steimDataMinMax.getEncodedData());
+                minMaxRecord.getHeader().setNumSamples((short)steimDataMinMax.getNumSamples());
+                out.add(minMaxRecord);
+                samplesRemaining -= steimDataMinMax.getNumSamples();
+                start = start.plusSeconds(steimDataMinMax.getNumSamples()/2);
+                offset += steimDataMinMax.getNumSamples();
                 int[] tempData = new int[samplesRemaining];
-                System.arraycopy(maxData, steimDataMax.getNumSamples(), tempData, 0, tempData.length);
-                maxData = tempData;
-                tempData = new int[samplesRemaining];
-                System.arraycopy(minData, steimDataMin.getNumSamples(), tempData, 0, tempData.length);
-                minData = tempData;
+                System.arraycopy(minMaxData, steimDataMinMax.getNumSamples(), tempData, 0, tempData.length);
+                minMaxData = tempData;
             } catch (IOException e) {
                 throw new SeedFormatException(e);
             }
@@ -65,14 +53,18 @@ public class MiniSeedFactory {
         return out;
     }
     
-    static DataRecord createEmptyDataRecord(String[] nslc, Instant start, int seq, boolean isMax) throws SeedFormatException {
+    static DataRecord createEmptyDataRecord(String[] nslc, Instant start, int seq) throws SeedFormatException {
         DataHeader header = new DataHeader(seq, 'D', false);
-        String chan = (isMax ? "LX" : "LI") + nslc[3].charAt(2);
-        header.setStationIdentifier(nslc[1]);
-        header.setChannelIdentifier(chan); // L, X or I, orient
+        String chan = "LX" + nslc[3].charAt(2);
+        if (nslc[3].charAt(1) == 'N') {
+            // strong motion HNZ -> LYZ
+            chan = "LY" + nslc[3].charAt(2);
+        }
         header.setNetworkCode(nslc[0]);
-        header.setLocationIdentifier(nslc[3].substring(0, 2)); // or should be MI, MA
-        header.setSampleRateFactor((short) 1);
+        header.setStationIdentifier(nslc[1]);
+        header.setLocationIdentifier(nslc[2]); 
+        header.setChannelIdentifier(chan); // L, X, orient
+        header.setSampleRateFactor((short) 2);  // 2 samples per second, min and max
         header.setSampleRateMultiplier((short) 1);
         Btime btime = new Btime(start);
         header.setStartBtime(btime);

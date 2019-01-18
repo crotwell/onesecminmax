@@ -59,7 +59,10 @@ public class DataLinkOneSec {
     private static final ZoneId UTC_ZONE = ZoneId.of("Z");
 
     public void init() throws DataLinkException {
-        inDataLink = new DataLink(DataLink.EEYORE_HOST, DataLink.EEYORE_PORT, 30, VERBOSE);
+        String host = DataLink.EEYORE_HOST;
+        int port = DataLink.EEYORE_PORT;
+        if (VERBOSE) System.out.println("Attempt datalink to "+host+":"+port);
+        inDataLink = new DataLink(host, port, 30, VERBOSE);
         inDataLink.match("CO_BIRD_00_HH.");
     }
 
@@ -130,12 +133,12 @@ public class DataLinkOneSec {
                 onesec = prev;
                 prev = null;
             } else {
-                System.out.println("Not Contig " + prev.start + " " + prev.maximum.length + "  " + onesec.start);
+                System.out.println("Not Contig " + prev.start + " " + prev.minmax.length + "  " + onesec.start);
                 sendMinMax(prev);
                 prev = null;
             }
         }
-        if (sendThreashold > 0 && onesec.maximum.length >= sendThreashold) {
+        if (sendThreashold > 0 && onesec.minmax.length >= sendThreashold) {
             sendMinMax(onesec);
             lastOneSecMap.remove(onesec.key);
         } else {
@@ -202,10 +205,9 @@ public class DataLinkOneSec {
             dos.writeByte(start.get(ChronoField.SECOND_OF_MINUTE));
             dos.writeByte(onesec.key.length());
             dos.writeBytes(onesec.key);
-            dos.writeShort(onesec.maximum.length);
-            for (int i = 0; i < onesec.minimum.length; i++) {
-                dos.writeInt(onesec.minimum[i]);
-                dos.writeInt(onesec.maximum[i]);
+            dos.writeShort(onesec.minmax.length);
+            for (int i = 0; i < onesec.minmax.length; i++) {
+                dos.writeInt(onesec.minmax[i]);
             }
             dos.close();
         } catch (FileNotFoundException e) {
@@ -235,7 +237,7 @@ public class DataLinkOneSec {
             jsap = new SimpleJSAP("OneSecMinMax", 
                                   "One sec min max from miniseed",
                                   new Parameter[] {
-                                          new FlaggedOption( "file", FileStringParser.getParser().setMustExist(true), JSAP.NO_DEFAULT, JSAP.REQUIRED, 'f', JSAP.NO_LONGFLAG, 
+                                          new FlaggedOption( "file", FileStringParser.getParser().setMustExist(true), JSAP.NO_DEFAULT, JSAP.NOT_REQUIRED, 'f', JSAP.NO_LONGFLAG, 
                                                   "A miniseed file." ),
                                           new FlaggedOption( "outputdir", FileStringParser.getParser().setMustBeDirectory(true), JSAP.NO_DEFAULT, JSAP.REQUIRED, 'o', JSAP.NO_LONGFLAG, 
                                                   "A miniseed file." ),

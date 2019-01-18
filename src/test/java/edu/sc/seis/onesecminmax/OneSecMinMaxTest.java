@@ -27,10 +27,10 @@ public class OneSecMinMaxTest {
         }
         OneSecMinMax oneSec = new OneSecMinMax("FAKE", start, sps, y);
         assertEquals("start", Instant.parse(iso), oneSec.start);
-        assertEquals("len", numSeconds, oneSec.minimum.length);
-        for (int i = 0; i < oneSec.minimum.length; i++) {
-            assertEquals("min idx "+i, 1, oneSec.minimum[i]);
-            assertEquals("max idx "+i, sps, oneSec.maximum[i]);
+        assertEquals("len", numSeconds, oneSec.minmax.length/2);
+        for (int i = 0; i < oneSec.minmax.length; i+=2) {
+            assertEquals("min idx "+i, 1, oneSec.minmax[i]);
+            assertEquals("max idx "+i, sps, oneSec.minmax[i+1]);
         }
     }
 
@@ -52,18 +52,18 @@ public class OneSecMinMaxTest {
         }
         OneSecMinMax oneSec = new OneSecMinMax("FAKE", start, sps, y);
         assertEquals("start", Instant.parse(iso), oneSec.start);
-        assertEquals("len", numSeconds+1, oneSec.minimum.length);
+        assertEquals("len", numSeconds+1, oneSec.minmax.length/2);
         // first sec special
-        assertEquals("min idx 0", 1, oneSec.minimum[0]);
-        assertEquals("max idx 0", sps-1, oneSec.maximum[0]);
+        assertEquals("min idx 0", 1, oneSec.minmax[0]);
+        assertEquals("max idx 0", sps-1, oneSec.minmax[1]);
         int i;
-        for (i = 1; i < oneSec.minimum.length-1; i++) {
-            assertEquals("min idx "+i, 1, oneSec.minimum[i]);
-            assertEquals("max idx "+i, sps, oneSec.maximum[i]);
+        for (i = 2; i < oneSec.minmax.length-2; i+=2) {
+            assertEquals("min idx "+i, 1, oneSec.minmax[i]);
+            assertEquals("max idx "+i, sps, oneSec.minmax[i+1]);
         }
         // last sec special
-        assertEquals("min idx "+i, sps, oneSec.minimum[i]);
-        assertEquals("max idx "+i, sps, oneSec.maximum[i]);
+        assertEquals("min idx "+i, sps, oneSec.minmax[i]);
+        assertEquals("max idx "+i, sps, oneSec.minmax[i+1]);
     }
     
 
@@ -86,19 +86,19 @@ public class OneSecMinMaxTest {
         }
         OneSecMinMax oneSec = new OneSecMinMax("FAKE", start, sps, y);
         assertEquals("start", Instant.parse(iso), oneSec.start);
-        assertEquals("len", numSeconds+1, oneSec.minimum.length);
+        assertEquals("len", numSeconds+1, oneSec.minmax.length/2);
         
         // first sec special
-        assertEquals("min idx 0", 1, oneSec.minimum[0]);
-        assertEquals("max idx 0", 1, oneSec.maximum[0]);
+        assertEquals("min idx 0", 1, oneSec.minmax[0]);
+        assertEquals("max idx 0", 1, oneSec.minmax[1]);
         int i;
-        for (i = 1; i < oneSec.minimum.length-1; i++) {
-            assertEquals("min idx "+i, 1, oneSec.minimum[i]);
-            assertEquals("max idx "+i, sps, oneSec.maximum[i]);
+        for (i = 2; i < oneSec.minmax.length-2; i+=2) {
+            assertEquals("min idx "+i, 1, oneSec.minmax[i]);
+            assertEquals("max idx "+i, sps, oneSec.minmax[i+1]);
         }
         // last sec special
-        assertEquals("min idx "+i, 2, oneSec.minimum[i]);
-        assertEquals("max idx "+i, sps, oneSec.maximum[i]);
+        assertEquals("min idx "+i, 2, oneSec.minmax[i]);
+        assertEquals("max idx "+i, sps, oneSec.minmax[i+1]);
     }
     
     @Test
@@ -136,23 +136,23 @@ public class OneSecMinMaxTest {
         }
         OneSecMinMax prev = new OneSecMinMax("FAKE", start, sps, y);
         OneSecMinMax next = new OneSecMinMax("FAKE", start.plusSeconds(numSeconds), sps, y);
-        assertTrue("contiguous "+"prev: "+prev.start+"  "+prev.maximum.length+"  next: "+next.start, prev.isContiguous(next));
+        assertTrue("contiguous "+"prev: "+prev.start+"  "+prev.minmax.length/2+"  next: "+next.start, prev.isContiguous(next));
 
         Instant nextStart = Instant.parse("2017-12-03T10:15:31.100Z");
         next = new OneSecMinMax("FAKE", nextStart, sps, y);
-        assertTrue("contiguous "+"prev: "+prev.start+"  "+prev.maximum.length+"  next: "+next.start, prev.isContiguous(next));
+        assertTrue("contiguous "+"prev: "+prev.start+"  "+prev.minmax.length/2+"  next: "+next.start, prev.isContiguous(next));
         
         nextStart = Instant.parse("2017-12-03T10:15:32.100Z");
         next = new OneSecMinMax("FAKE", nextStart, sps, y);
-        assertTrue("contiguous "+"prev: "+prev.start+"  "+prev.maximum.length+"  next: "+next.start, prev.isContiguous(next));
+        assertTrue("contiguous "+"prev: "+prev.start+"  "+prev.minmax.length/2+"  next: "+next.start, prev.isContiguous(next));
         
         nextStart = Instant.parse("2017-12-03T10:15:33.100Z");
         next = new OneSecMinMax("FAKE", nextStart, sps, y);
-        assertFalse("contiguous "+"prev: "+prev.start+"  "+prev.maximum.length+"  next: "+next.start, prev.isContiguous(next));
+        assertFalse("contiguous "+"prev: "+prev.start+"  "+prev.minmax.length/2+"  next: "+next.start, prev.isContiguous(next));
 
         nextStart = Instant.parse("2017-12-03T10:15:34.100Z");
         next = new OneSecMinMax("FAKE", nextStart, sps, y);
-        assertFalse("contiguous "+"prev: "+prev.start+"  "+prev.maximum.length+"  next: "+next.start, prev.isContiguous(next));
+        assertFalse("contiguous "+"prev: "+prev.start+"  "+prev.minmax.length/2+"  next: "+next.start, prev.isContiguous(next));
         
     }
 
