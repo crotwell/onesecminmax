@@ -13,8 +13,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoField;
 import java.util.ArrayList;
@@ -33,6 +32,7 @@ import com.martiansoftware.jsap.stringparsers.FileStringParser;
 import edu.iris.dmc.seedcodec.CodecException;
 import edu.iris.dmc.seedcodec.SteimException;
 import edu.iris.dmc.seedcodec.UnsupportedCompressionType;
+import edu.sc.seis.seisFile.TimeUtils;
 import edu.sc.seis.seisFile.datalink.DataLink;
 import edu.sc.seis.seisFile.datalink.DataLinkException;
 import edu.sc.seis.seisFile.datalink.DataLinkPacket;
@@ -123,8 +123,13 @@ public class DataLinkOneSec {
         }
     }
 
-    void processDataRecord(DataRecord dr) throws SeedFormatException, CodecException {  
+    void processDataRecord(DataRecord dr) throws SeedFormatException, CodecException {
 
+        // sometimes data record has zero samples, just contains trigger b201 for example
+        // nothing to do in this case.
+        if (dr.getHeader().getNumSamples() == 0) {
+            return;
+        }
         OneSecMinMax onesec = new OneSecMinMax(dr);
         OneSecMinMax prev = lastOneSecMap.get(onesec.key);
         if (prev != null) {
@@ -152,6 +157,18 @@ public class DataLinkOneSec {
         }
     }
 
+    private File minMaxFileFor(String netCode, String staCode, String locCode, String chanCode, ZonedDateTime start) {
+        File netDir = new File(minMaxDir, netCode);
+        File staDir = new File(netDir, staCode);
+        String year = yearFormatter.format(start);
+        File yearDir = new File(staDir, year);
+        String doy = doyFormatter.format(start);
+        File jdayDir = new File(yearDir, doy);
+        jdayDir.mkdirs();
+        File minmax = new File(jdayDir, netCode+"." +staCode+"." +locCode+"." +chanCode + "." + formatter.format(start));
+        return minmax;
+    }
+
     private void sendMinMax(OneSecMinMax onesec) throws SeedFormatException, SteimException {
         try {
             //System.out.println("Pretend Send MinMax: " + onesec.key + " " + onesec.minimum.length);
@@ -164,15 +181,7 @@ public class DataLinkOneSec {
 
             ZonedDateTime start = ZonedDateTime.ofInstant(onesec.start, UTC_ZONE);
             String[] split = onesec.keyAsNSLC();
-            File netDir = new File(minMaxDir, netCode);
-            File staDir = new File(netDir, staCode);
-            String year = yearFormatter.format(start);
-            File yearDir = new File(staDir, year);
-            String doy = doyFormatter.format(start);
-            File jdayDir = new File(yearDir, doy);
-            jdayDir.mkdirs();
-            File minmax = new File(jdayDir, netCode+"." +staCode+"." +locCode+"." +chanCode + "." + formatter.format(onesec.start));
-
+            File minmax = minMaxFileFor(netCode, staCode, locCode, chanCode, start);
             DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(minmax, true)));
             for (DataRecord dataRecord : minMaxList) {
                 dataRecord.write(dos);
@@ -259,6 +268,57 @@ public class DataLinkOneSec {
         }
     }
 
+    void processOneFile(File miniseedFile) throws SeedFormatException, CodecException, IOException {
+        if (miniseedFile.canRead()) {
+            if (miniseedFile.isFile()) {
+                DataInputStream dis = null;
+                try {
+                    dis = new DataInputStream(new BufferedInputStream(new FileInputStream(miniseedFile)));
+                    processMiniseedFile(dis);
+                } catch (EOFException e) {
+                    System.out.println("EOF, All Done!");
+                } finally {
+                    if (dis != null) dis.close();
+                }
+            } else if (miniseedFile.isDirectory()) {
+                File[] subdirFiles = miniseedFile.listFiles();
+                for (File f: subdirFiles) {
+                    if (f.isFile()) {
+                        String[] split = f.getName().split("\\.");
+                        String netCode = split[0];
+                        String staCode = split[1];
+                        String locCode = split[2];
+                        String chanCode = split[3];
+                        int year = Integer.parseInt(split[4]);
+                        int jday = Integer.parseInt(split[5]);
+                        int hour = Integer.parseInt(split[6]);
+                        ZonedDateTime start = ZonedDateTime.of(year,
+                                        Month.JANUARY.getValue(),
+                                        1,
+                                        hour,
+                                        0,
+                                        0,
+                                        0,
+                                        TimeUtils.TZ_UTC)
+                                .plus(Duration.ofDays(jday-1));
+                        if (chanCode.charAt(0) == 'H' && (chanCode.charAt(1) == 'H' || chanCode.charAt(1) == 'N')) {
+                            String mmChan = chanCode;
+                            if (chanCode.charAt(1) == 'H') {
+                                mmChan = "LX"+chanCode.charAt(2);
+                            } else if (chanCode.charAt(1) == 'H') {
+                                mmChan = "LY" + chanCode.charAt(2);
+                            }
+                            File minmaxFile = minMaxFileFor(netCode, staCode, locCode, mmChan, start);
+                            if ( ! minmaxFile.exists() || minmaxFile.lastModified() < f.lastModified()) {
+                                processOneFile(f);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     public static void main(String[] args) {
         try {
             JSAPResult config = parseCmdLine(args);
@@ -273,18 +333,7 @@ public class DataLinkOneSec {
             
             if (config.contains("file")) {
                 File miniseedFile = config.getFile("file");
-                if (miniseedFile.canRead()) {
-                    DataInputStream dis = null;
-                    try {
-                        dis = new DataInputStream(new BufferedInputStream(new FileInputStream(miniseedFile)));
-                        app.processMiniseedFile(dis);
-
-                    } catch (EOFException e) {
-                        System.out.println("EOF, All Done!");
-                    } finally {
-                        if (dis != null) dis.close();
-                    }
-                }
+                app.processOneFile(miniseedFile);
             } else {
                 app.init();
                 app.run();

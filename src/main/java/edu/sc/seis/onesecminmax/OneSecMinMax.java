@@ -19,7 +19,9 @@ public class OneSecMinMax {
     public OneSecMinMax(DataRecord dr) throws SeedFormatException, CodecException {
         Instant drStart = dr.getStartBtime().toInstant();
         double samplesPerSecond = dr.getSampleRate();
-        
+        if (dr.getHeader().getNumSamples() == 0) {
+            throw new SeedFormatException("Record contains zero samples: "+dr);
+        }
         
         DecompressedData decomp = dr.decompress();
         if (decomp.getType() != DecompressedData.INTEGER && decomp.getType() != DecompressedData.SHORT) {

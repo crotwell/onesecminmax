@@ -43,7 +43,7 @@ dependencies {
 }
 
 group = "edu.sc.seis"
-version = "0.1.0"
+version = "0.1.2"
 
 application {
     mainClass.set("edu.sc.seis.onesecminmax.DataLinkOneSec")
