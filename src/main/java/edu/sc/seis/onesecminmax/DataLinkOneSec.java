@@ -165,7 +165,13 @@ public class DataLinkOneSec {
         String doy = doyFormatter.format(start);
         File jdayDir = new File(yearDir, doy);
         jdayDir.mkdirs();
-        File minmax = new File(jdayDir, netCode+"." +staCode+"." +locCode+"." +chanCode + "." + formatter.format(start));
+        String mmChan = chanCode;
+        if (chanCode.charAt(1) == 'H') {
+            mmChan = "LX"+chanCode.charAt(2);
+        } else if (chanCode.charAt(1) == 'N') {
+            mmChan = "LY" + chanCode.charAt(2);
+        }
+        File minmax = new File(jdayDir, netCode+"." +staCode+"." +locCode+"." +mmChan + "." + formatter.format(start));
         return minmax;
     }
 
@@ -276,14 +282,16 @@ public class DataLinkOneSec {
                     dis = new DataInputStream(new BufferedInputStream(new FileInputStream(miniseedFile)));
                     processMiniseedFile(dis);
                 } catch (EOFException e) {
-                    System.out.println("EOF, All Done!");
+                    System.out.println("EOF, All Done!"+ miniseedFile.getName());
                 } finally {
                     if (dis != null) dis.close();
                 }
             } else if (miniseedFile.isDirectory()) {
                 File[] subdirFiles = miniseedFile.listFiles();
                 for (File f: subdirFiles) {
-                    if (f.isFile()) {
+                    if (f.isDirectory()) {
+                        processOneFile(f);
+                    } else if (f.isFile()) {
                         String[] split = f.getName().split("\\.");
                         String netCode = split[0];
                         String staCode = split[1];
@@ -302,13 +310,12 @@ public class DataLinkOneSec {
                                         TimeUtils.TZ_UTC)
                                 .plus(Duration.ofDays(jday-1));
                         if (chanCode.charAt(0) == 'H' && (chanCode.charAt(1) == 'H' || chanCode.charAt(1) == 'N')) {
-                            String mmChan = chanCode;
-                            if (chanCode.charAt(1) == 'H') {
-                                mmChan = "LX"+chanCode.charAt(2);
-                            } else if (chanCode.charAt(1) == 'H') {
-                                mmChan = "LY" + chanCode.charAt(2);
+                            File minmaxFile = minMaxFileFor(netCode, staCode, locCode, chanCode, start);
+                            if ( ! minmaxFile.exists()) {
+                                if (VERBOSE) System.out.println(" doesn't exist: "+minmaxFile.getPath());
+                            } else if (minmaxFile.lastModified() < f.lastModified()) {
+                                if (VERBOSE) System.out.println(" modified recently: "+minmaxFile.getName());
                             }
-                            File minmaxFile = minMaxFileFor(netCode, staCode, locCode, mmChan, start);
                             if ( ! minmaxFile.exists() || minmaxFile.lastModified() < f.lastModified()) {
                                 processOneFile(f);
                             }
@@ -338,7 +345,7 @@ public class DataLinkOneSec {
                 app.init();
                 app.run();
             }
-            System.out.println("All Done!");
+            if (app.VERBOSE) System.out.println("All Done!");
         } catch (DataLinkException e) {
             e.printStackTrace();
         } catch (FileNotFoundException e) {
