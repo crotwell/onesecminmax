@@ -317,6 +317,10 @@ public class DataLinkOneSec {
                                 if (VERBOSE) System.out.println(" modified recently: "+minmaxFile.getName());
                             }
                             if ( ! minmaxFile.exists() || minmaxFile.lastModified() < f.lastModified()) {
+                                if (minmaxFile.exists()) {
+                                    // delete old file before create new
+                                    minmaxFile.delete();
+                                }
                                 processOneFile(f);
                             }
                         }
